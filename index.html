@@ -147,87 +147,93 @@
 
         <!-- Error / Success Messages -->
         <div id="msg-box" class="hidden p-3 rounded-lg text-sm text-center font-medium"></div>
-
-        </main>
+    </main>
 
     <script>
         // === DOM Elements ===
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const preview = document.getElementById('preview');
-        const btnStart = document.getElementById('btn-start');
-        const btnCapture = document.getElementById('btn-capture');
-        const btnSwitch = document.getElementById('btn-switch');
-        const btnRetake = document.getElementById('btn-retake');
-        const btnWa = document.getElementById('btn-wa');
-        const btnDownload = document.getElementById('btn-download');
-        const btnGrid = document.getElementById('btn-grid');
-        const btnTestConn = document.getElementById('btn-test-conn');
-        const overlayInfo = document.getElementById('overlay-info');
-        const cameraControls = document.getElementById('camera-controls');
-        const previewControls = document.getElementById('preview-controls');
-        const actionBtns = document.getElementById('action-btns');
-        const msgBox = document.getElementById('msg-box');
-        const statusDot = document.getElementById('status-dot');
-        const connStatus = document.getElementById('conn-status');
-        const gridOverlay = document.getElementById('grid-overlay');
-        const backendUrlInput = document.getElementById('backend-url');
-        const waIcon = document.getElementById('wa-icon');
-        const waText = document.getElementById('wa-text');
-        const waLoader = document.getElementById('wa-loader');
-
-        // === State ===
-        let currentStream = null;
-        let facingMode = 'environment';
-        let photoDataUrl = null;
-        let uploadedImageUrl = null;
-        let locationData = { lat: null, lng: null, address: 'Sedang mencari...', accuracy: null };
-        let gridVisible = false;
-        let geoWatchId = null;
+        var video = document.getElementById('video');
+        var canvas = document.getElementById('canvas');
+        var preview = document.getElementById('preview');
+        var btnStart = document.getElementById('btn-start');
+        var btnCapture = document.getElementById('btn-capture');
+        var btnSwitch = document.getElementById('btn-switch');
+        var btnRetake = document.getElementById('btn-retake');
+        var btnWa = document.getElementById('btn-wa');
+        var btnDownload = document.getElementById('btn-download');
+        var btnGrid = document.getElementById('btn-grid');
+        var btnTestConn = document.getElementById('btn-test-conn');
+        var btnRefreshAddr = document.getElementById('btn-refresh-addr');
+        var btnEditAddr = document.getElementById('btn-edit-addr');
+        var btnSaveAddr = document.getElementById('btn-save-addr');
+        var addrInputBox = document.getElementById('addr-input-box');
+        var addrInput = document.getElementById('addr-input');
+        var overlayInfo = document.getElementById('overlay-info');
+        var cameraControls = document.getElementById('camera-controls');
+        var previewControls = document.getElementById('preview-controls');
+        var actionBtns = document.getElementById('action-btns');
+        var msgBox = document.getElementById('msg-box');
+        var statusDot = document.getElementById('status-dot');
+        var connStatus = document.getElementById('conn-status');
+        var gridOverlay = document.getElementById('grid-overlay');
+        var backendUrlInput = document.getElementById('backend-url-display');
+        var waIcon = document.getElementById('wa-icon');
+        var waText = document.getElementById('wa-text');
+        var waLoader = document.getElementById('wa-loader');
 
         // === Auto Detect Backend URL ===
-// Ganti URL ini dengan URL backend Render Anda setelah deploy
-const PROD_BACKEND_URL = 'https://phototag-backend.onrender.com';
-const DEV_BACKEND_URL = 'http://localhost:5000';
+        var PROD_BACKEND_URL = 'https://xycepot.pythonanywhere.com';
+        var DEV_BACKEND_URL = 'http://localhost:5000';
 
-function detectBackendUrl() {
-    const hostname = window.location.hostname;
-    // Jika running di localhost atau IP lokal
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
-        return DEV_BACKEND_URL;
-    }
-    // Jika running di GitHub Pages atau domain lain (production)
-    return PROD_BACKEND_URL;
-}
+        function detectBackendUrl() {
+            var hostname = window.location.hostname;
+            if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.indexOf('192.168.') === 0) {
+                return DEV_BACKEND_URL;
+            }
+            return PROD_BACKEND_URL;
+        }
 
-// Set default value saat load
-backendUrlInput.value = detectBackendUrl();
+        var currentBackendUrl = detectBackendUrl();
+        backendUrlInput.textContent = currentBackendUrl;
 
-const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
+        function getBackendUrl() {
+            return currentBackendUrl.replace(/\/$/, '');
+        }
+
+        // === State ===
+        var currentStream = null;
+        var facingMode = 'environment';
+        var photoDataUrl = null;
+        var uploadedImageUrl = null;
+        var locationData = { lat: null, lng: null, address: 'Sedang mencari...', accuracy: null };
+        var gridVisible = false;
+        var geoWatchId = null;
 
         // === Utilities ===
         function showMsg(text, type) {
             type = type || 'error';
             msgBox.textContent = text;
-            msgBox.className = 'p-3 rounded-lg text-sm text-center font-medium fade-in ' + (
-                type === 'error' ? 'bg-red-900/40 text-red-300 border border-red-700' :
-                type === 'success' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700' :
-                'bg-blue-900/40 text-blue-300 border border-blue-700'
-            );
+            var className = 'p-3 rounded-lg text-sm text-center font-medium fade-in ';
+            if (type === 'error') {
+                className += 'bg-red-900/40 text-red-300 border border-red-700';
+            } else if (type === 'success') {
+                className += 'bg-emerald-900/40 text-emerald-300 border border-emerald-700';
+            } else {
+                className += 'bg-blue-900/40 text-blue-300 border border-blue-700';
+            }
+            msgBox.className = className;
             msgBox.classList.remove('hidden');
-            setTimeout(function() { msgBox.classList.add('hidden'); }, 6000);
+            setTimeout(function() {
+                msgBox.classList.add('hidden');
+            }, 6000);
         }
 
         async function getAddress(lat, lng) {
-            // CARA 1: BigDataCloud (free, CORS enabled, no API key)
+            // CARA 1: BigDataCloud (free, CORS enabled)
             try {
-                const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lng + '&localityLanguage=id', {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' }
-                });
-                const data = await res.json();
-                if (data && data.locality && data.city) {
-                    const parts = [];
+                var res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lng + '&localityLanguage=id');
+                var data = await res.json();
+                if (data && data.locality) {
+                    var parts = [];
                     if (data.locality) parts.push(data.locality);
                     if (data.city && data.city !== data.locality) parts.push(data.city);
                     if (data.principalSubdivision) parts.push(data.principalSubdivision);
@@ -238,24 +244,22 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
                 console.log('BigDataCloud gagal:', e);
             }
 
-            // CARA 2: Nominatim (OpenStreetMap) dengan User-Agent
+            // CARA 2: Nominatim dengan User-Agent
             try {
-                const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=18&addressdetails=1&accept-language=id', {
-                    method: 'GET',
+                var res2 = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=18&addressdetails=1&accept-language=id', {
                     headers: {
                         'Accept': 'application/json',
-                        'User-Agent': 'PhotoTagApp/1.0 (phototag@example.com)'
+                        'User-Agent': 'PhotoTagApp/1.0'
                     }
                 });
-                const data = await res.json();
-                if (data && data.display_name) {
-                    return data.display_name;
+                var data2 = await res2.json();
+                if (data2 && data2.display_name) {
+                    return data2.display_name;
                 }
             } catch (e) {
                 console.log('Nominatim gagal:', e);
             }
 
-            // Fallback: koordinat saja
             return 'Alamat tidak tersedia (Lat: ' + lat.toFixed(4) + ', Lng: ' + lng.toFixed(4) + ')';
         }
 
@@ -272,7 +276,7 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
                 if (currentStream) {
                     currentStream.getTracks().forEach(function(t) { t.stop(); });
                 }
-                const stream = await navigator.mediaDevices.getUserMedia({
+                var stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
                     audio: false
                 });
@@ -310,10 +314,10 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
 
         // === Canvas Drawing ===
         function drawOverlayOnCanvas(ctx, width, height) {
-            const pad = Math.max(20, Math.floor(width * 0.03));
-            const lineHeight = Math.max(22, Math.floor(height * 0.035));
-            const fontSize = Math.max(16, Math.floor(height * 0.025));
-            const boxHeight = lineHeight * 4 + pad;
+            var pad = Math.max(20, Math.floor(width * 0.03));
+            var lineHeight = Math.max(22, Math.floor(height * 0.035));
+            var fontSize = Math.max(16, Math.floor(height * 0.025));
+            var boxHeight = lineHeight * 4 + pad;
 
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(pad, pad, width - pad * 2, boxHeight);
@@ -330,8 +334,8 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
             ctx.fillText('● Long: ' + (locationData.lng ? locationData.lng.toFixed(6) : '--'), pad + 12, pad + lineHeight * 2);
 
             ctx.fillStyle = '#fbbf24';
-            const maxChars = Math.floor((width - pad * 2 - 24) / (fontSize * 0.6));
-            const addr = locationData.address.length > maxChars ? locationData.address.substring(0, maxChars) + '...' : locationData.address;
+            var maxChars = Math.floor((width - pad * 2 - 24) / (fontSize * 0.6));
+            var addr = locationData.address.length > maxChars ? locationData.address.substring(0, maxChars) + '...' : locationData.address;
             ctx.fillText('● ' + addr, pad + 12, pad + lineHeight * 3);
 
             ctx.fillStyle = '#9ca3af';
@@ -364,11 +368,11 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
         btnCapture.addEventListener('click', function() {
             if (!currentStream) return;
 
-            const w = video.videoWidth || 1280;
-            const h = video.videoHeight || 720;
+            var w = video.videoWidth || 1280;
+            var h = video.videoHeight || 720;
             canvas.width = w;
             canvas.height = h;
-            const ctx = canvas.getContext('2d');
+            var ctx = canvas.getContext('2d');
 
             if (facingMode === 'user') {
                 ctx.translate(w, 0);
@@ -406,20 +410,64 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
 
         btnDownload.addEventListener('click', function() {
             if (!photoDataUrl) return;
-            const a = document.createElement('a');
+            var a = document.createElement('a');
             a.href = photoDataUrl;
             a.download = 'PhotoTag_' + Date.now() + '.jpg';
             a.click();
             showMsg('Gambar berhasil diunduh!', 'success');
         });
 
+        // === Refresh Alamat ===
+        btnRefreshAddr.addEventListener('click', async function() {
+            if (!locationData.lat || !locationData.lng) {
+                showMsg('GPS belum aktif. Tunggu sebentar...');
+                return;
+            }
+            this.textContent = '🔄 Mencari...';
+            this.disabled = true;
+            locationData.address = 'Sedang mencari ulang...';
+            updateOverlay();
+
+            var addr = await getAddress(locationData.lat, locationData.lng);
+            locationData.address = addr;
+            updateOverlay();
+
+            this.textContent = '🔄 Refresh Alamat';
+            this.disabled = false;
+            showMsg('Alamat diperbarui!', 'success');
+        });
+
+        // === Edit Alamat Manual ===
+        btnEditAddr.addEventListener('click', function() {
+            if (addrInputBox.classList.contains('hidden')) {
+                addrInputBox.classList.remove('hidden');
+                addrInput.value = locationData.address !== 'Sedang mencari...' ? locationData.address : '';
+                addrInput.focus();
+                this.textContent = '❌ Batal';
+            } else {
+                addrInputBox.classList.add('hidden');
+                this.textContent = '✏️ Edit Manual';
+            }
+        });
+
+        btnSaveAddr.addEventListener('click', function() {
+            var val = addrInput.value.trim();
+            if (val) {
+                locationData.address = val;
+                updateOverlay();
+                addrInputBox.classList.add('hidden');
+                btnEditAddr.textContent = '✏️ Edit Manual';
+                showMsg('Alamat manual disimpan!', 'success');
+            }
+        });
+
         // === Backend Upload ===
         async function uploadToBackend() {
             if (!photoDataUrl) return null;
 
-            const url = getBackendUrl();
+            var url = getBackendUrl();
             try {
-                const res = await fetch(url + '/upload', {
+                var res = await fetch(url + '/upload', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -434,7 +482,7 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
                         }
                     })
                 });
-                const data = await res.json();
+                var data = await res.json();
                 if (data.success) return data.url;
                 throw new Error(data.error || 'Upload gagal');
             } catch (err) {
@@ -461,14 +509,14 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
             waText.classList.remove('hidden');
             waLoader.classList.add('hidden');
 
-            const caption = '📸 Photo Tagging\n\n📍 Lokasi:\nLat: ' + locationData.lat + '\nLong: ' + locationData.lng + '\n📍 Alamat: ' + locationData.address + '\n🕐 Waktu: ' + new Date().toLocaleString('id-ID');
+            var caption = '📸 Photo Tagging\n\n📍 Lokasi:\nLat: ' + locationData.lat + '\nLong: ' + locationData.lng + '\n📍 Alamat: ' + locationData.address + '\n🕐 Waktu: ' + new Date().toLocaleString('id-ID');
 
-            // CARA 1: Web Share API dengan File
+            // CARA 1: Web Share API
             if (navigator.canShare) {
                 try {
-                    const res = await fetch(photoDataUrl);
-                    const blob = await res.blob();
-                    const file = new File([blob], 'PhotoTag_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+                    var res = await fetch(photoDataUrl);
+                    var blob = await res.blob();
+                    var file = new File([blob], 'PhotoTag_' + Date.now() + '.jpg', { type: 'image/jpeg' });
 
                     if (navigator.canShare({ files: [file] })) {
                         await navigator.share({
@@ -476,7 +524,7 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
                             title: 'PhotoTag',
                             text: caption
                         });
-                        showMsg('Share sheet terbuka! Pilih WhatsApp untuk kirim foto.', 'success');
+                        showMsg('Share sheet terbuka! Pilih WhatsApp.', 'success');
                         return;
                     }
                 } catch (err) {
@@ -488,13 +536,13 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
 
             // CARA 2: Copy Image ke Clipboard
             try {
-                const res = await fetch(photoDataUrl);
-                const blob = await res.blob();
+                var res2 = await fetch(photoDataUrl);
+                var blob2 = await res2.blob();
                 if (navigator.clipboard && navigator.clipboard.write) {
                     await navigator.clipboard.write([
-                        new ClipboardItem({ 'image/png': blob })
+                        new ClipboardItem({ 'image/png': blob2 })
                     ]);
-                    const ok = confirm(
+                    var ok = confirm(
                         'Foto sudah di-COPY ke clipboard!\n\n' +
                         'Sekarang akan membuka WhatsApp Web.\n' +
                         'Langkah: Buka chat -> Tekan Ctrl+V untuk paste foto.\n\n' +
@@ -510,40 +558,31 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
             }
 
             // CARA 3: Buka Tab Baru dengan Foto
-            const newTab = window.open();
+            var newTab = window.open();
             newTab.document.write(
-                '<html>' +
-                '<head><title>PhotoTag - Foto Anda</title></head>' +
+                '<html><head><title>PhotoTag - Foto Anda</title></head>' +
                 '<body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#111;color:#fff;font-family:sans-serif;padding:20px;">' +
                 '<h2>📸 Foto PhotoTag Anda</h2>' +
-                '<p style="color:#aaa;max-width:400px;text-align:center;">' +
-                'Klik kanan gambar di bawah -> "Copy image" atau "Save image as..."<br>' +
-                'Lalu paste ke WhatsApp.' +
-                '</p>' +
+                '<p style="color:#aaa;max-width:400px;text-align:center;">Klik kanan gambar di bawah -> "Copy image" atau "Save image as..."<br>Lalu paste ke WhatsApp.</p>' +
                 '<img src="' + photoDataUrl + '" style="max-width:90%;max-height:60vh;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.5);margin:20px 0;">' +
                 '<div style="background:#222;padding:15px;border-radius:8px;max-width:400px;width:100%;margin-top:10px;">' +
                 '<p style="margin:0 0 8px 0;font-size:12px;color:#888;">📋 Caption (bisa copy):</p>' +
                 '<textarea id="cap" style="width:100%;background:#333;color:#fff;border:none;border-radius:6px;padding:10px;font-size:13px;resize:none;" rows="4" readonly>' + caption.replace(/\n/g, '&#10;') + '</textarea>' +
-                '<button onclick="document.getElementById(\'cap\').select();document.execCommand(\'copy\');this.textContent=\'✅ Tersalin!\';" style="margin-top:8px;width:100%;padding:8px;background:#10b981;border:none;border-radius:6px;color:#fff;font-weight:bold;cursor:pointer;">' +
-                '📋 Copy Caption' +
-                '</button>' +
+                '<button onclick="document.getElementById(\'cap\').select();document.execCommand(\'copy\');this.textContent=\'✅ Tersalin!\';" style="margin-top:8px;width:100%;padding:8px;background:#10b981;border:none;border-radius:6px;color:#fff;font-weight:bold;cursor:pointer;">📋 Copy Caption</button>' +
                 '</div>' +
-                '<a href="https://wa.me/?text=' + encodeURIComponent(caption + (uploadedImageUrl ? '\n\n📎 Lihat foto: ' + uploadedImageUrl : '')) + '" target="_blank" style="margin-top:15px;padding:12px 24px;background:#25d366;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">' +
-                '💬 Buka WhatsApp (kirim teks)' +
-                '</a>' +
-                '</body>' +
-                '</html>'
+                '<a href="https://wa.me/?text=' + encodeURIComponent(caption + (uploadedImageUrl ? '\n\n📎 Lihat foto: ' + uploadedImageUrl : '')) + '" target="_blank" style="margin-top:15px;padding:12px 24px;background:#25d366;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">💬 Buka WhatsApp (kirim teks)</a>' +
+                '</body></html>'
             );
             showMsg('Tab baru terbuka dengan foto. Copy gambar dan paste ke WhatsApp.', 'info');
         });
 
         // === Test Connection ===
         btnTestConn.addEventListener('click', async function() {
-            const url = getBackendUrl();
+            var url = getBackendUrl();
             connStatus.textContent = 'Testing...';
             connStatus.className = 'text-xs px-2 py-1 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700';
             try {
-                const res = await fetch(url + '/', { method: 'GET' });
+                var res = await fetch(url + '/', { method: 'GET' });
                 if (res.ok) {
                     connStatus.textContent = 'Terhubung';
                     connStatus.className = 'text-xs px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300 border border-emerald-700';
@@ -555,53 +594,6 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
                 connStatus.textContent = 'Offline';
                 connStatus.className = 'text-xs px-2 py-1 rounded-full bg-red-900/40 text-red-300 border border-red-700';
                 showMsg('Backend tidak terhubung: ' + err.message);
-            }
-        });
-
-        // === Refresh Alamat ===
-        document.getElementById('btn-refresh-addr').addEventListener('click', async function() {
-            if (!locationData.lat || !locationData.lng) {
-                showMsg('GPS belum aktif. Tunggu sebentar...');
-                return;
-            }
-            this.textContent = '🔄 Mencari...';
-            this.disabled = true;
-            locationData.address = 'Sedang mencari ulang...';
-            updateOverlay();
-
-            const addr = await getAddress(locationData.lat, locationData.lng);
-            locationData.address = addr;
-            updateOverlay();
-
-            this.textContent = '🔄 Refresh Alamat';
-            this.disabled = false;
-            showMsg('Alamat diperbarui!', 'success');
-        });
-
-        // === Edit Alamat Manual ===
-        document.getElementById('btn-edit-addr').addEventListener('click', function() {
-            const box = document.getElementById('addr-input-box');
-            const input = document.getElementById('addr-input');
-            if (box.classList.contains('hidden')) {
-                box.classList.remove('hidden');
-                input.value = locationData.address !== 'Sedang mencari...' ? locationData.address : '';
-                input.focus();
-                this.textContent = '❌ Batal';
-            } else {
-                box.classList.add('hidden');
-                this.textContent = '✏️ Edit Manual';
-            }
-        });
-
-        document.getElementById('btn-save-addr').addEventListener('click', function() {
-            const input = document.getElementById('addr-input');
-            const val = input.value.trim();
-            if (val) {
-                locationData.address = val;
-                updateOverlay();
-                document.getElementById('addr-input-box').classList.add('hidden');
-                document.getElementById('btn-edit-addr').textContent = '✏️ Edit Manual';
-                showMsg('Alamat manual disimpan!', 'success');
             }
         });
 
