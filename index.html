@@ -42,6 +42,17 @@
         </div>
     </header>
 
+    <!-- Compact Test Connection Bar -->
+    <div class="w-full max-w-lg px-4 py-2 flex items-center justify-between">
+        <div class="flex items-center gap-2 text-xs text-gray-500">
+            <span>Backend:</span>
+            <span id="backend-url-display" class="mono text-gray-400 truncate max-w-[180px]">auto-detect</span>
+        </div>
+        <button id="btn-test-conn" class="text-xs px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 transition font-medium">
+            🔄 Test
+        </button>
+    </div>
+
     <main class="w-full max-w-lg px-4 py-4 space-y-4">
 
         <!-- Camera Container -->
@@ -62,11 +73,26 @@
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="text-amber-400">●</span>
-                    <span id="addr-text" class="truncate block max-w-[250px]">Alamat: --</span>
+                    <span id="addr-text" class="truncate block max-w-[220px]">Alamat: --</span>
                 </div>
                 <div class="flex items-center gap-2 text-gray-400">
                     <span>🕐</span>
                     <span id="time-text">--</span>
+                </div>
+                <div class="flex gap-2 mt-1 pt-1 border-t border-white/10">
+                    <button id="btn-refresh-addr" class="text-[10px] px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition text-white">
+                        🔄 Refresh Alamat
+                    </button>
+                    <button id="btn-edit-addr" class="text-[10px] px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition text-white">
+                        ✏️ Edit Manual
+                    </button>
+                </div>
+                <div id="addr-input-box" class="hidden mt-1">
+                    <input id="addr-input" type="text" placeholder="Ketik alamat manual..." 
+                        class="w-full px-2 py-1 rounded bg-white/10 border border-white/20 text-white text-[10px] placeholder-gray-500 focus:outline-none focus:border-amber-400">
+                    <button id="btn-save-addr" class="mt-1 w-full text-[10px] px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 transition text-white">
+                        💾 Simpan Alamat
+                    </button>
                 </div>
             </div>
 
@@ -119,37 +145,10 @@
             </button>
         </div>
 
-        <!-- Backend Config -->
-        <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-3">
-            <h3 class="font-semibold text-sm text-gray-300">⚙️ Konfigurasi Backend</h3>
-            <div class="space-y-2">
-                <label class="text-xs text-gray-400">Server URL</label>
-                <input id="backend-url" type="text" value="http://localhost:5000" 
-                    class="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm mono focus:outline-none focus:border-indigo-500 transition"
-                    placeholder="http://localhost:5000">
-                <p class="text-xs text-gray-500">Pastikan backend Flask sudah berjalan di URL ini.</p>
-            </div>
-            <button id="btn-test-conn" class="w-full py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 transition text-sm font-medium">
-                🔄 Test Koneksi
-            </button>
-        </div>
-
         <!-- Error / Success Messages -->
         <div id="msg-box" class="hidden p-3 rounded-lg text-sm text-center font-medium"></div>
 
-        <!-- Info Card -->
-        <div class="p-4 rounded-xl bg-gray-900/50 border border-gray-800 text-sm text-gray-400 space-y-2">
-            <p class="font-semibold text-gray-300">📋 Cara Penggunaan:</p>
-            <ol class="list-decimal list-inside space-y-1 text-xs">
-                <li>Jalankan <code class="bg-gray-800 px-1 rounded">python backend.py</code> di terminal</li>
-                <li>Pastikan URL backend benar di atas</li>
-                <li>Klik "Izinkan Kamera & Lokasi"</li>
-                <li>Beri izin akses kamera dan lokasi di browser</li>
-                <li>Tekan tombol merah untuk memotret</li>
-                <li>Klik "Kirim WhatsApp" - gambar akan diupload ke server lalu dibagikan</li>
-            </ol>
-        </div>
-    </main>
+        </main>
 
     <script>
         // === DOM Elements ===
@@ -188,7 +187,7 @@
 
         // === Auto Detect Backend URL ===
 // Ganti URL ini dengan URL backend Render Anda setelah deploy
-const PROD_BACKEND_URL = 'https://xycepot.pythonanywhere.com';
+const PROD_BACKEND_URL = 'https://phototag-backend.onrender.com';
 const DEV_BACKEND_URL = 'http://localhost:5000';
 
 function detectBackendUrl() {
@@ -220,13 +219,44 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
         }
 
         async function getAddress(lat, lng) {
+            // CARA 1: BigDataCloud (free, CORS enabled, no API key)
             try {
-                const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=18&addressdetails=1');
+                const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lng + '&localityLanguage=id', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
                 const data = await res.json();
-                return data.display_name || 'Alamat tidak ditemukan';
+                if (data && data.locality && data.city) {
+                    const parts = [];
+                    if (data.locality) parts.push(data.locality);
+                    if (data.city && data.city !== data.locality) parts.push(data.city);
+                    if (data.principalSubdivision) parts.push(data.principalSubdivision);
+                    if (data.countryName) parts.push(data.countryName);
+                    return parts.join(', ') || 'Alamat tidak ditemukan';
+                }
             } catch (e) {
-                return 'Gagal mendapatkan alamat';
+                console.log('BigDataCloud gagal:', e);
             }
+
+            // CARA 2: Nominatim (OpenStreetMap) dengan User-Agent
+            try {
+                const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=18&addressdetails=1&accept-language=id', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': 'PhotoTagApp/1.0 (phototag@example.com)'
+                    }
+                });
+                const data = await res.json();
+                if (data && data.display_name) {
+                    return data.display_name;
+                }
+            } catch (e) {
+                console.log('Nominatim gagal:', e);
+            }
+
+            // Fallback: koordinat saja
+            return 'Alamat tidak tersedia (Lat: ' + lat.toFixed(4) + ', Lng: ' + lng.toFixed(4) + ')';
         }
 
         function updateOverlay() {
@@ -525,6 +555,53 @@ const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
                 connStatus.textContent = 'Offline';
                 connStatus.className = 'text-xs px-2 py-1 rounded-full bg-red-900/40 text-red-300 border border-red-700';
                 showMsg('Backend tidak terhubung: ' + err.message);
+            }
+        });
+
+        // === Refresh Alamat ===
+        document.getElementById('btn-refresh-addr').addEventListener('click', async function() {
+            if (!locationData.lat || !locationData.lng) {
+                showMsg('GPS belum aktif. Tunggu sebentar...');
+                return;
+            }
+            this.textContent = '🔄 Mencari...';
+            this.disabled = true;
+            locationData.address = 'Sedang mencari ulang...';
+            updateOverlay();
+
+            const addr = await getAddress(locationData.lat, locationData.lng);
+            locationData.address = addr;
+            updateOverlay();
+
+            this.textContent = '🔄 Refresh Alamat';
+            this.disabled = false;
+            showMsg('Alamat diperbarui!', 'success');
+        });
+
+        // === Edit Alamat Manual ===
+        document.getElementById('btn-edit-addr').addEventListener('click', function() {
+            const box = document.getElementById('addr-input-box');
+            const input = document.getElementById('addr-input');
+            if (box.classList.contains('hidden')) {
+                box.classList.remove('hidden');
+                input.value = locationData.address !== 'Sedang mencari...' ? locationData.address : '';
+                input.focus();
+                this.textContent = '❌ Batal';
+            } else {
+                box.classList.add('hidden');
+                this.textContent = '✏️ Edit Manual';
+            }
+        });
+
+        document.getElementById('btn-save-addr').addEventListener('click', function() {
+            const input = document.getElementById('addr-input');
+            const val = input.value.trim();
+            if (val) {
+                locationData.address = val;
+                updateOverlay();
+                document.getElementById('addr-input-box').classList.add('hidden');
+                document.getElementById('btn-edit-addr').textContent = '✏️ Edit Manual';
+                showMsg('Alamat manual disimpan!', 'success');
             }
         });
 
