@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PhotoTag - GPS Photo Tagging</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .shutter-btn { transition: all 0.15s ease; }
+        .shutter-btn:active { transform: scale(0.92); }
+        .pulse-ring { animation: pulse-ring 2s infinite; }
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .loader { border: 3px solid #374151; border-top: 3px solid #10b981; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col items-center">
+
+    <!-- Header -->
+    <header class="w-full max-w-lg px-4 py-4 flex items-center justify-between sticky top-0 bg-gray-950/90 backdrop-blur-md z-50 border-b border-gray-800">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-lg">
+                📸
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight">PhotoTag</h1>
+                <p class="text-xs text-gray-400">GPS Photo Tagging</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span id="conn-status" class="text-xs px-2 py-1 rounded-full bg-gray-800 text-gray-400 border border-gray-700">Menunggu</span>
+            <div id="status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+        </div>
+    </header>
+
+    <main class="w-full max-w-lg px-4 py-4 space-y-4">
+
+        <!-- Camera Container -->
+        <div class="relative w-full rounded-2xl overflow-hidden shadow-2xl border border-gray-700 bg-black aspect-[3/4] max-h-[70vh]">
+            <video id="video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+            <canvas id="canvas" class="hidden"></canvas>
+            <img id="preview" class="w-full h-full object-cover hidden fade-in" alt="Preview" />
+
+            <!-- Camera Overlay Info -->
+            <div id="overlay-info" class="absolute top-3 left-3 right-3 bg-black/70 backdrop-blur-md rounded-xl p-3 text-xs mono space-y-1.5 border border-white/10 hidden">
+                <div class="flex items-center gap-2">
+                    <span class="text-emerald-400">●</span>
+                    <span id="lat-text">Lat: --</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sky-400">●</span>
+                    <span id="lng-text">Long: --</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-amber-400">●</span>
+                    <span id="addr-text" class="truncate block max-w-[250px]">Alamat: --</span>
+                </div>
+                <div class="flex items-center gap-2 text-gray-400">
+                    <span>🕐</span>
+                    <span id="time-text">--</span>
+                </div>
+            </div>
+
+            <!-- Grid Overlay -->
+            <div id="grid-overlay" class="absolute inset-0 pointer-events-none opacity-20 hidden">
+                <div class="absolute top-1/3 left-0 right-0 h-px bg-white"></div>
+                <div class="absolute top-2/3 left-0 right-0 h-px bg-white"></div>
+                <div class="absolute left-1/3 top-0 bottom-0 w-px bg-white"></div>
+                <div class="absolute left-2/3 top-0 bottom-0 w-px bg-white"></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="space-y-4">
+            <!-- Camera Controls -->
+            <div id="camera-controls" class="flex items-center justify-center gap-6">
+                <button id="btn-grid" class="p-3 rounded-full bg-gray-800 hover:bg-gray-700 transition border border-gray-600 text-lg" title="Toggle Grid">
+                    ⊞
+                </button>
+                <button id="btn-capture" class="shutter-btn w-18 h-18 rounded-full bg-white border-4 border-gray-300 flex items-center justify-center shadow-xl pulse-ring">
+                    <div class="w-12 h-12 rounded-full bg-red-500 hover:bg-red-400 transition"></div>
+                </button>
+                <button id="btn-switch" class="p-3 rounded-full bg-gray-800 hover:bg-gray-700 transition border border-gray-600 text-lg" title="Ganti Kamera">
+                    🔄
+                </button>
+            </div>
+
+            <!-- Preview Controls -->
+            <div id="preview-controls" class="flex items-center justify-center gap-4 hidden">
+                <button id="btn-retake" class="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gray-800 hover:bg-gray-700 transition border border-gray-600 font-medium">
+                    ↩️ Ulangi
+                </button>
+            </div>
+
+            <!-- Action Buttons -->
+            <div id="action-btns" class="grid grid-cols-2 gap-3 hidden fade-in">
+                <button id="btn-wa" class="flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-green-600 hover:bg-green-500 transition font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="wa-icon">💬</span>
+                    <span id="wa-text">Kirim WhatsApp</span>
+                    <div id="wa-loader" class="loader hidden"></div>
+                </button>
+                <button id="btn-download" class="flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 transition font-semibold shadow-lg">
+                    <span>⬇️</span> Download
+                </button>
+            </div>
+
+            <!-- Start Button -->
+            <button id="btn-start" class="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 transition font-semibold shadow-lg text-lg">
+                📷 Izinkan Kamera & Lokasi
+            </button>
+        </div>
+
+        <!-- Backend Config -->
+        <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-3">
+            <h3 class="font-semibold text-sm text-gray-300">⚙️ Konfigurasi Backend</h3>
+            <div class="space-y-2">
+                <label class="text-xs text-gray-400">Server URL</label>
+                <input id="backend-url" type="text" value="http://localhost:5000" 
+                    class="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm mono focus:outline-none focus:border-indigo-500 transition"
+                    placeholder="http://localhost:5000">
+                <p class="text-xs text-gray-500">Pastikan backend Flask sudah berjalan di URL ini.</p>
+            </div>
+            <button id="btn-test-conn" class="w-full py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 transition text-sm font-medium">
+                🔄 Test Koneksi
+            </button>
+        </div>
+
+        <!-- Error / Success Messages -->
+        <div id="msg-box" class="hidden p-3 rounded-lg text-sm text-center font-medium"></div>
+
+        <!-- Info Card -->
+        <div class="p-4 rounded-xl bg-gray-900/50 border border-gray-800 text-sm text-gray-400 space-y-2">
+            <p class="font-semibold text-gray-300">📋 Cara Penggunaan:</p>
+            <ol class="list-decimal list-inside space-y-1 text-xs">
+                <li>Jalankan <code class="bg-gray-800 px-1 rounded">python backend.py</code> di terminal</li>
+                <li>Pastikan URL backend benar di atas</li>
+                <li>Klik "Izinkan Kamera & Lokasi"</li>
+                <li>Beri izin akses kamera dan lokasi di browser</li>
+                <li>Tekan tombol merah untuk memotret</li>
+                <li>Klik "Kirim WhatsApp" - gambar akan diupload ke server lalu dibagikan</li>
+            </ol>
+        </div>
+    </main>
+
+    <script>
+        // === DOM Elements ===
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const preview = document.getElementById('preview');
+        const btnStart = document.getElementById('btn-start');
+        const btnCapture = document.getElementById('btn-capture');
+        const btnSwitch = document.getElementById('btn-switch');
+        const btnRetake = document.getElementById('btn-retake');
+        const btnWa = document.getElementById('btn-wa');
+        const btnDownload = document.getElementById('btn-download');
+        const btnGrid = document.getElementById('btn-grid');
+        const btnTestConn = document.getElementById('btn-test-conn');
+        const overlayInfo = document.getElementById('overlay-info');
+        const cameraControls = document.getElementById('camera-controls');
+        const previewControls = document.getElementById('preview-controls');
+        const actionBtns = document.getElementById('action-btns');
+        const msgBox = document.getElementById('msg-box');
+        const statusDot = document.getElementById('status-dot');
+        const connStatus = document.getElementById('conn-status');
+        const gridOverlay = document.getElementById('grid-overlay');
+        const backendUrlInput = document.getElementById('backend-url');
+        const waIcon = document.getElementById('wa-icon');
+        const waText = document.getElementById('wa-text');
+        const waLoader = document.getElementById('wa-loader');
+
+        // === State ===
+        let currentStream = null;
+        let facingMode = 'environment';
+        let photoDataUrl = null;
+        let uploadedImageUrl = null;
+        let locationData = { lat: null, lng: null, address: 'Sedang mencari...', accuracy: null };
+        let gridVisible = false;
+        let geoWatchId = null;
+
+        // === Auto Detect Backend URL ===
+// Ganti URL ini dengan URL backend Render Anda setelah deploy
+const PROD_BACKEND_URL = 'https://phototag-backend.onrender.com';
+const DEV_BACKEND_URL = 'http://localhost:5000';
+
+function detectBackendUrl() {
+    const hostname = window.location.hostname;
+    // Jika running di localhost atau IP lokal
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
+        return DEV_BACKEND_URL;
+    }
+    // Jika running di GitHub Pages atau domain lain (production)
+    return PROD_BACKEND_URL;
+}
+
+// Set default value saat load
+backendUrlInput.value = detectBackendUrl();
+
+const getBackendUrl = () => backendUrlInput.value.replace(/\/$/, '');
+
+        // === Utilities ===
+        function showMsg(text, type) {
+            type = type || 'error';
+            msgBox.textContent = text;
+            msgBox.className = 'p-3 rounded-lg text-sm text-center font-medium fade-in ' + (
+                type === 'error' ? 'bg-red-900/40 text-red-300 border border-red-700' :
+                type === 'success' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700' :
+                'bg-blue-900/40 text-blue-300 border border-blue-700'
+            );
+            msgBox.classList.remove('hidden');
+            setTimeout(function() { msgBox.classList.add('hidden'); }, 6000);
+        }
+
+        async function getAddress(lat, lng) {
+            try {
+                const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=18&addressdetails=1');
+                const data = await res.json();
+                return data.display_name || 'Alamat tidak ditemukan';
+            } catch (e) {
+                return 'Gagal mendapatkan alamat';
+            }
+        }
+
+        function updateOverlay() {
+            document.getElementById('lat-text').textContent = 'Lat: ' + (locationData.lat ? locationData.lat.toFixed(6) : '--');
+            document.getElementById('lng-text').textContent = 'Long: ' + (locationData.lng ? locationData.lng.toFixed(6) : '--');
+            document.getElementById('addr-text').textContent = 'Alamat: ' + locationData.address;
+            document.getElementById('time-text').textContent = new Date().toLocaleString('id-ID');
+        }
+
+        // === Camera ===
+        async function startCamera() {
+            try {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(function(t) { t.stop(); });
+                }
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    audio: false
+                });
+                currentStream = stream;
+                video.srcObject = stream;
+                statusDot.classList.remove('bg-red-500');
+                statusDot.classList.add('bg-green-500');
+                overlayInfo.classList.remove('hidden');
+                btnStart.classList.add('hidden');
+            } catch (err) {
+                showMsg('Gagal mengakses kamera: ' + err.message);
+            }
+        }
+
+        // === Geolocation ===
+        function getLocation() {
+            if (!navigator.geolocation) {
+                showMsg('Browser tidak mendukung geolokasi');
+                return;
+            }
+            geoWatchId = navigator.geolocation.watchPosition(
+                async function(pos) {
+                    locationData.lat = pos.coords.latitude;
+                    locationData.lng = pos.coords.longitude;
+                    locationData.accuracy = pos.coords.accuracy;
+                    locationData.address = await getAddress(locationData.lat, locationData.lng);
+                    updateOverlay();
+                },
+                function(err) {
+                    showMsg('Gagal mendapatkan lokasi: ' + err.message);
+                },
+                { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+            );
+        }
+
+        // === Canvas Drawing ===
+        function drawOverlayOnCanvas(ctx, width, height) {
+            const pad = Math.max(20, Math.floor(width * 0.03));
+            const lineHeight = Math.max(22, Math.floor(height * 0.035));
+            const fontSize = Math.max(16, Math.floor(height * 0.025));
+            const boxHeight = lineHeight * 4 + pad;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(pad, pad, width - pad * 2, boxHeight);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(pad, pad, width - pad * 2, boxHeight);
+
+            ctx.font = 'bold ' + fontSize + 'px "JetBrains Mono", monospace';
+
+            ctx.fillStyle = '#34d399';
+            ctx.fillText('● Lat: ' + (locationData.lat ? locationData.lat.toFixed(6) : '--'), pad + 12, pad + lineHeight);
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('● Long: ' + (locationData.lng ? locationData.lng.toFixed(6) : '--'), pad + 12, pad + lineHeight * 2);
+
+            ctx.fillStyle = '#fbbf24';
+            const maxChars = Math.floor((width - pad * 2 - 24) / (fontSize * 0.6));
+            const addr = locationData.address.length > maxChars ? locationData.address.substring(0, maxChars) + '...' : locationData.address;
+            ctx.fillText('● ' + addr, pad + 12, pad + lineHeight * 3);
+
+            ctx.fillStyle = '#9ca3af';
+            ctx.fillText('🕐 ' + new Date().toLocaleString('id-ID'), pad + 12, pad + lineHeight * 4);
+        }
+
+        // === Event Listeners ===
+
+        btnStart.addEventListener('click', function() {
+            startCamera();
+            getLocation();
+        });
+
+        btnSwitch.addEventListener('click', function() {
+            facingMode = facingMode === 'user' ? 'environment' : 'user';
+            startCamera();
+        });
+
+        btnGrid.addEventListener('click', function() {
+            gridVisible = !gridVisible;
+            if (gridVisible) {
+                gridOverlay.classList.remove('hidden');
+                btnGrid.style.backgroundColor = '#374151';
+            } else {
+                gridOverlay.classList.add('hidden');
+                btnGrid.style.backgroundColor = '';
+            }
+        });
+
+        btnCapture.addEventListener('click', function() {
+            if (!currentStream) return;
+
+            const w = video.videoWidth || 1280;
+            const h = video.videoHeight || 720;
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+
+            if (facingMode === 'user') {
+                ctx.translate(w, 0);
+                ctx.scale(-1, 1);
+            }
+            ctx.drawImage(video, 0, 0, w, h);
+            if (facingMode === 'user') {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+            }
+
+            drawOverlayOnCanvas(ctx, w, h);
+            photoDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+            preview.src = photoDataUrl;
+            preview.classList.remove('hidden');
+            video.classList.add('hidden');
+            overlayInfo.classList.add('hidden');
+            gridOverlay.classList.add('hidden');
+            cameraControls.classList.add('hidden');
+            previewControls.classList.remove('hidden');
+            actionBtns.classList.remove('hidden');
+        });
+
+        btnRetake.addEventListener('click', function() {
+            preview.classList.add('hidden');
+            video.classList.remove('hidden');
+            overlayInfo.classList.remove('hidden');
+            if (gridVisible) gridOverlay.classList.remove('hidden');
+            cameraControls.classList.remove('hidden');
+            previewControls.classList.add('hidden');
+            actionBtns.classList.add('hidden');
+            photoDataUrl = null;
+            uploadedImageUrl = null;
+        });
+
+        btnDownload.addEventListener('click', function() {
+            if (!photoDataUrl) return;
+            const a = document.createElement('a');
+            a.href = photoDataUrl;
+            a.download = 'PhotoTag_' + Date.now() + '.jpg';
+            a.click();
+            showMsg('Gambar berhasil diunduh!', 'success');
+        });
+
+        // === Backend Upload ===
+        async function uploadToBackend() {
+            if (!photoDataUrl) return null;
+
+            const url = getBackendUrl();
+            try {
+                const res = await fetch(url + '/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: photoDataUrl,
+                        metadata: {
+                            lat: locationData.lat,
+                            lng: locationData.lng,
+                            address: locationData.address,
+                            accuracy: locationData.accuracy,
+                            timestamp: new Date().toISOString(),
+                            device: navigator.userAgent
+                        }
+                    })
+                });
+                const data = await res.json();
+                if (data.success) return data.url;
+                throw new Error(data.error || 'Upload gagal');
+            } catch (err) {
+                showMsg('Upload ke backend gagal: ' + err.message);
+                return null;
+            }
+        }
+
+        // === WhatsApp ===
+        btnWa.addEventListener('click', async function() {
+            if (!photoDataUrl) return;
+
+            btnWa.disabled = true;
+            waIcon.classList.add('hidden');
+            waText.classList.add('hidden');
+            waLoader.classList.remove('hidden');
+
+            if (!uploadedImageUrl) {
+                uploadedImageUrl = await uploadToBackend();
+            }
+
+            btnWa.disabled = false;
+            waIcon.classList.remove('hidden');
+            waText.classList.remove('hidden');
+            waLoader.classList.add('hidden');
+
+            const caption = '📸 Photo Tagging\n\n📍 Lokasi:\nLat: ' + locationData.lat + '\nLong: ' + locationData.lng + '\n📍 Alamat: ' + locationData.address + '\n🕐 Waktu: ' + new Date().toLocaleString('id-ID');
+
+            // CARA 1: Web Share API dengan File
+            if (navigator.canShare) {
+                try {
+                    const res = await fetch(photoDataUrl);
+                    const blob = await res.blob();
+                    const file = new File([blob], 'PhotoTag_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+
+                    if (navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                            files: [file],
+                            title: 'PhotoTag',
+                            text: caption
+                        });
+                        showMsg('Share sheet terbuka! Pilih WhatsApp untuk kirim foto.', 'success');
+                        return;
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.log('Web Share gagal:', err);
+                    }
+                }
+            }
+
+            // CARA 2: Copy Image ke Clipboard
+            try {
+                const res = await fetch(photoDataUrl);
+                const blob = await res.blob();
+                if (navigator.clipboard && navigator.clipboard.write) {
+                    await navigator.clipboard.write([
+                        new ClipboardItem({ 'image/png': blob })
+                    ]);
+                    const ok = confirm(
+                        'Foto sudah di-COPY ke clipboard!\n\n' +
+                        'Sekarang akan membuka WhatsApp Web.\n' +
+                        'Langkah: Buka chat -> Tekan Ctrl+V untuk paste foto.\n\n' +
+                        'Klik OK untuk buka WhatsApp Web.'
+                    );
+                    if (ok) {
+                        window.open('https://web.whatsapp.com', '_blank');
+                    }
+                    return;
+                }
+            } catch (err) {
+                console.log('Copy image gagal:', err);
+            }
+
+            // CARA 3: Buka Tab Baru dengan Foto
+            const newTab = window.open();
+            newTab.document.write(
+                '<html>' +
+                '<head><title>PhotoTag - Foto Anda</title></head>' +
+                '<body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#111;color:#fff;font-family:sans-serif;padding:20px;">' +
+                '<h2>📸 Foto PhotoTag Anda</h2>' +
+                '<p style="color:#aaa;max-width:400px;text-align:center;">' +
+                'Klik kanan gambar di bawah -> "Copy image" atau "Save image as..."<br>' +
+                'Lalu paste ke WhatsApp.' +
+                '</p>' +
+                '<img src="' + photoDataUrl + '" style="max-width:90%;max-height:60vh;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.5);margin:20px 0;">' +
+                '<div style="background:#222;padding:15px;border-radius:8px;max-width:400px;width:100%;margin-top:10px;">' +
+                '<p style="margin:0 0 8px 0;font-size:12px;color:#888;">📋 Caption (bisa copy):</p>' +
+                '<textarea id="cap" style="width:100%;background:#333;color:#fff;border:none;border-radius:6px;padding:10px;font-size:13px;resize:none;" rows="4" readonly>' + caption.replace(/\n/g, '&#10;') + '</textarea>' +
+                '<button onclick="document.getElementById(\'cap\').select();document.execCommand(\'copy\');this.textContent=\'✅ Tersalin!\';" style="margin-top:8px;width:100%;padding:8px;background:#10b981;border:none;border-radius:6px;color:#fff;font-weight:bold;cursor:pointer;">' +
+                '📋 Copy Caption' +
+                '</button>' +
+                '</div>' +
+                '<a href="https://wa.me/?text=' + encodeURIComponent(caption + (uploadedImageUrl ? '\n\n📎 Lihat foto: ' + uploadedImageUrl : '')) + '" target="_blank" style="margin-top:15px;padding:12px 24px;background:#25d366;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">' +
+                '💬 Buka WhatsApp (kirim teks)' +
+                '</a>' +
+                '</body>' +
+                '</html>'
+            );
+            showMsg('Tab baru terbuka dengan foto. Copy gambar dan paste ke WhatsApp.', 'info');
+        });
+
+        // === Test Connection ===
+        btnTestConn.addEventListener('click', async function() {
+            const url = getBackendUrl();
+            connStatus.textContent = 'Testing...';
+            connStatus.className = 'text-xs px-2 py-1 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700';
+            try {
+                const res = await fetch(url + '/', { method: 'GET' });
+                if (res.ok) {
+                    connStatus.textContent = 'Terhubung';
+                    connStatus.className = 'text-xs px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300 border border-emerald-700';
+                    showMsg('Backend terhubung!', 'success');
+                } else {
+                    throw new Error('Status ' + res.status);
+                }
+            } catch (err) {
+                connStatus.textContent = 'Offline';
+                connStatus.className = 'text-xs px-2 py-1 rounded-full bg-red-900/40 text-red-300 border border-red-700';
+                showMsg('Backend tidak terhubung: ' + err.message);
+            }
+        });
+
+        // === Init ===
+        updateOverlay();
+    </script>
+</body>
+</html>
